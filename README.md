@@ -16,6 +16,7 @@ src/
 │   ├── database/           # Database implementation
 │   │   ├── models/         # SQLAlchemy models
 │   │   └── repositories/   # Repository implementations
+│   ├── security/          # Authentication & Security
 │   └── web/               # Web framework (FastAPI)
 │       ├── controllers/   # API route handlers
 │       └── schemas/      # Pydantic schemas
@@ -25,6 +26,9 @@ src/
 ## 🚀 Features
 
 - **RESTful API** with comprehensive CRUD operations
+- **JWT Authentication** with secure user management
+- **User Registration & Login** system
+- **Password Security** with bcrypt hashing
 - **Clean Architecture** with dependency inversion
 - **SOLID Principles** implementation
 - **Async/Await** support with SQLAlchemy
@@ -38,14 +42,36 @@ src/
 
 ## 📋 API Endpoints
 
+### Authentication Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `POST` | `/auth/register` | Register a new user | ❌ |
+| `POST` | `/auth/login` | User login and get JWT token | ❌ |
+| `GET` | `/auth/me` | Get current user information | ✅ |
+| `POST` | `/auth/change-password` | Change user password | ✅ |
+| `POST` | `/auth/reset-password` | Request password reset | ❌ |
+| `POST` | `/auth/reset-password/confirm` | Confirm password reset | ❌ |
+
+### Blog Posts Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `GET` | `/api/posts` | Get all blog posts with comment counts | ❌ |
+| `POST` | `/api/posts` | Create a new blog post | ✅ |
+| `GET` | `/api/posts/{id}` | Get specific blog post with comments | ❌ |
+| `PUT` | `/api/posts/{id}` | Update a blog post | ✅ |
+| `DELETE` | `/api/posts/{id}` | Delete a blog post | ✅ |
+
+### Comments Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| `POST` | `/api/posts/{id}/comments` | Add comment to blog post | ❌ |
+
+### System Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/posts` | Get all blog posts with comment counts |
-| `POST` | `/api/posts` | Create a new blog post |
-| `GET` | `/api/posts/{id}` | Get specific blog post with comments |
-| `POST` | `/api/posts/{id}/comments` | Add comment to blog post |
 | `GET` | `/health` | Health check endpoint |
 | `GET` | `/docs` | Interactive API documentation |
+| `GET` | `/` | API information |
 
 ## 🛠️ Technology Stack
 
@@ -53,6 +79,9 @@ src/
 - **SQLAlchemy** - SQL toolkit and ORM with async support
 - **PostgreSQL** - Robust relational database
 - **Pydantic** - Data validation using Python type annotations
+- **JWT (python-jose)** - JSON Web Token authentication
+- **bcrypt (passlib)** - Password hashing and verification
+- **email-validator** - Email validation
 - **Alembic** - Database migration tool
 - **Docker** - Containerization platform
 - **pytest** - Testing framework
@@ -80,6 +109,7 @@ cp .env.example .env
 
 # Edit .env file with your configuration
 # DATABASE_URL=postgresql+asyncpg://blog_user:blog_password@localhost:5432/blog_db
+# JWT_SECRET_KEY=your-secret-key-here-change-in-production
 ```
 
 ### 3. Using Docker (Recommended)
@@ -100,7 +130,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 
 # Start PostgreSQL database
 docker-compose up db
@@ -109,53 +139,47 @@ docker-compose up db
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## 📖 API Usage Examples
+## 🔐 Authentication & Security
 
-### Create a Blog Post
+### JWT Token Authentication
+- **Token Type**: Bearer JWT tokens
+- **Expiration**: 30 minutes (configurable)
+- **Algorithm**: HS256
+- **Claims**: User ID, username, expiration
 
-```bash
-curl -X POST "http://localhost:8000/api/posts" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "My First Blog Post",
-    "content": "This is the content of my first blog post..."
-  }'
-```
+### Password Security
+- **Hashing**: bcrypt with automatic salt generation
+- **Strength Requirements**:
+  - Minimum 8 characters
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one digit
+  - At least one special character
 
-### Get All Blog Posts
+### User Validation
+- **Username**: 3-50 characters, alphanumeric and underscore only
+- **Email**: Valid email format, unique in system
+- **Password**: Complex password requirements enforced
 
-```bash
-curl -X GET "http://localhost:8000/api/posts"
-```
-
-### Get Specific Blog Post with Comments
-
-```bash
-curl -X GET "http://localhost:8000/api/posts/{post_id}"
-```
-
-### Add Comment to Blog Post
-
-```bash
-curl -X POST "http://localhost:8000/api/posts/{post_id}/comments" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "Great blog post!",
-    "author_name": "John Doe",
-    "author_email": "john@example.com"
-  }'
-```
+### Protected Routes
+Routes requiring authentication:
+- `POST /api/posts` - Create blog post
+- `PUT /api/posts/{id}` - Update blog post
+- `DELETE /api/posts/{id}` - Delete blog post
+- `GET /auth/me` - Get user profile
+- `POST /auth/change-password` - Change password
 
 ## 🏛️ Clean Architecture Implementation
 
 ### Domain Layer
-- **Entities**: `BlogPost` and `Comment` with business rules and validation
+- **Entities**: `BlogPost`, `Comment`, and `User` with business rules and validation
 - **Repository Interfaces**: Abstract contracts for data persistence
 - **Use Cases**: Application business logic and orchestration
 
 ### Infrastructure Layer
 - **Database Models**: SQLAlchemy models for data persistence
 - **Repository Implementations**: Concrete database operations
+- **Security Services**: Password hashing and JWT token management
 - **Web Controllers**: FastAPI route handlers
 - **Schemas**: Pydantic models for API validation
 
@@ -175,10 +199,26 @@ pytest
 pytest --cov=src --cov-report=html
 
 # Run specific test file
+pytest tests/test_auth.py
 pytest tests/test_blog_posts.py
 ```
 
 ## 📊 Database Schema
+
+### Users Table
+```sql
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    full_name VARCHAR(100),
+    hashed_password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    is_superuser BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
 
 ### Blog Posts Table
 ```sql
@@ -214,6 +254,9 @@ CREATE TABLE comments (
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://blog_user:blog_password@localhost:5432/blog_db` |
 | `DATABASE_POOL_SIZE` | Connection pool size | `10` |
 | `DATABASE_MAX_OVERFLOW` | Max overflow connections | `20` |
+| `JWT_SECRET_KEY` | JWT signing secret key | `your-secret-key-here-change-in-production` |
+| `JWT_ALGORITHM` | JWT signing algorithm | `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT token expiration | `30` |
 | `DEBUG` | Enable debug mode | `True` |
 | `HOST` | Server host | `0.0.0.0` |
 | `PORT` | Server port | `8000` |
@@ -247,58 +290,20 @@ docker run -d \
   --name blog-api \
   -p 8000:8000 \
   -e DATABASE_URL=your_production_db_url \
+  -e JWT_SECRET_KEY=your_production_secret_key \
   blog-api:latest
 ```
 
 ### Production Considerations
 
 1. **Environment Variables**: Use secure environment variable management
-2. **Database**: Use managed PostgreSQL service (AWS RDS, Google Cloud SQL)
-3. **Reverse Proxy**: Use Nginx or similar for SSL termination
-4. **Monitoring**: Implement application monitoring (Prometheus, Grafana)
-5. **Logging**: Centralized logging with structured logs
-6. **Security**: Implement authentication and authorization
+2. **JWT Secret**: Use a strong, randomly generated secret key
+3. **Database**: Use managed PostgreSQL service (AWS RDS, Google Cloud SQL)
+4. **Reverse Proxy**: Use Nginx or similar for SSL termination
+5. **Monitoring**: Implement application monitoring (Prometheus, Grafana)
+6. **Logging**: Centralized logging with structured logs
 7. **Rate Limiting**: Add rate limiting for API endpoints
-
-## 🔮 Next Steps (Future Enhancements)
-
-If I had more time, I would implement:
-
-### Authentication & Authorization
-- JWT-based authentication
-- Role-based access control (RBAC)
-- User management system
-
-### Advanced Features
-- **Search & Filtering**: Full-text search for blog posts
-- **Pagination**: Cursor-based pagination for better performance
-- **Caching**: Redis caching for frequently accessed data
-- **File Uploads**: Support for images and attachments
-- **Email Notifications**: Comment notifications to post authors
-
-### API Enhancements
-- **Versioning**: API versioning strategy
-- **Rate Limiting**: Request throttling and quotas
-- **Webhooks**: Event-driven notifications
-- **GraphQL**: Alternative query interface
-
-### DevOps & Monitoring
-- **CI/CD Pipeline**: Automated testing and deployment
-- **Monitoring**: Application performance monitoring (APM)
-- **Metrics**: Custom business metrics and dashboards
-- **Alerting**: Automated error detection and notifications
-
-### Testing & Quality
-- **Integration Tests**: End-to-end API testing
-- **Load Testing**: Performance and scalability testing
-- **Security Testing**: Vulnerability scanning
-- **Code Quality**: Static analysis and linting automation
-
-### Database Optimizations
-- **Indexing**: Query optimization and performance tuning
-- **Migrations**: Automated database schema management
-- **Backup Strategy**: Automated backups and disaster recovery
-- **Read Replicas**: Database scaling for read operations
+8. **CORS**: Configure CORS for production domains
 
 ## 🤝 Contributing
 
@@ -316,7 +321,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Felipe Marques da Silva**
 - Clean Architecture & SOLID Principles Expert
-- FastAPI & SQLAlchemy Specialist
 - Production-Ready API Development
 
 ---
@@ -325,7 +329,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
+- [JWT.io](https://jwt.io/) - JWT Token Debugger
 - [Clean Architecture by Robert C. Martin](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 - [SOLID Principles](https://en.wikipedia.org/wiki/SOLID)
+- [OAuth2 with FastAPI](https://fastapi.tiangolo.com/tutorial/security/)
 
-**API Documentation**: Visit `/docs` endpoint for interactive Swagger documentation.
+**API Documentation**: Visit `/docs` endpoint for interactive Swagger documentation with authentication support.
